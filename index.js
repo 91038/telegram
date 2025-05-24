@@ -612,8 +612,8 @@ app.post('/api/telegram/login', async (req, res) => {
       }
       
       result = await TelegramClientService.verifyCode(phoneNumber, phoneCodeHash, phoneCode);
-      
-      if (result.success) {
+        
+        if (result.success) {
         if (result.requiresPassword) {
           // 3단계: 2단계 인증 필요
           res.json({ 
@@ -887,10 +887,10 @@ async function startServer() {
     try {
         await ensureDataFolder();
         
-        app.listen(PORT, () => {
-            console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
+app.listen(PORT, () => {
+  console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
             console.log(`웹 인터페이스: http://localhost:${PORT}`);
-        });
+});
     } catch (error) {
         console.error('서버 시작 오류:', error);
         process.exit(1);

@@ -184,6 +184,6 @@ process.once('SIGTERM', async () => {
   console.log('서버를 종료합니다...');
   await telegramClient.stop();
   process.exit(0);
-});
+}); 
 
 module.exports = app; 
