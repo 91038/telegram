@@ -1,6 +1,6 @@
 const telegramClient = require('./services/telegramClientService');
 const smsService = require('./services/smsService');
-const config = require('./config');
+const configManager = require('./utils/configManager');
 
 async function main() {
     try {
@@ -23,9 +23,9 @@ async function main() {
         
         // 3. 메시지 템플릿 설정
         const messageTemplates = [
-            config.MESSAGE_TEMPLATE_1 || '첫 번째 메시지입니다.',
-            config.MESSAGE_TEMPLATE_2 || '두 번째 메시지입니다.',
-            config.MESSAGE_TEMPLATE_3 || '세 번째 메시지입니다.'
+            configManager.get('MESSAGE_TEMPLATE_1') || '첫 번째 메시지입니다.',
+            configManager.get('MESSAGE_TEMPLATE_2') || '두 번째 메시지입니다.',
+            configManager.get('MESSAGE_TEMPLATE_3') || '세 번째 메시지입니다.'
         ].filter(template => template && template.trim());
         
         console.log(`\n3. 메시지 템플릿 ${messageTemplates.length}개 준비됨:`);
@@ -34,9 +34,9 @@ async function main() {
         });
         
         // 4. 채팅방 모니터링 시작
-        const chatId = config.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
+        const chatId = configManager.get('TELEGRAM_CHAT_ID');
         if (!chatId) {
-            console.error('❌ 채팅방 ID가 설정되지 않았습니다. config.js 또는 .env 파일을 확인하세요.');
+            console.error('❌ 채팅방 ID가 설정되지 않았습니다. config.txt 파일을 확인하세요.');
             return;
         }
         

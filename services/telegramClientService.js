@@ -3,19 +3,19 @@ const { StringSession } = require('telegram/sessions');
 const { NewMessage } = require('telegram/events');
 const input = require('input');
 const dotenv = require('dotenv');
-const config = require('../config');
+const configManager = require('../utils/configManager');
 const smsService = require('./smsService');
 
 dotenv.config();
 
 class TelegramClientService {
   constructor() {
-    this.apiId = parseInt(process.env.TELEGRAM_API_ID);
-    this.apiHash = process.env.TELEGRAM_API_HASH;
-    this.sessionString = process.env.TELEGRAM_SESSION_STRING || '';
+    this.apiId = parseInt(configManager.get('TELEGRAM_API_ID'));
+    this.apiHash = configManager.get('TELEGRAM_API_HASH');
+    this.sessionString = configManager.get('TELEGRAM_SESSION_STRING') || '';
     this.client = null;
     this.isConnected = false;
-    this.currentTemplate = config.DEFAULT_TEMPLATE;
+    this.currentTemplate = configManager.get('DEFAULT_TEMPLATE') || 'template1';
     this.isRunning = false;
     this.targetChats = [];
     this._isListening = false;
@@ -256,7 +256,7 @@ class TelegramClientService {
       
       // 현재 템플릿 확인
       console.log(`현재 사용 중인 템플릿: ${this.currentTemplate}`);
-      console.log(`템플릿 내용: ${config.SMS_TEMPLATES[this.currentTemplate] || '없음'}`);
+      console.log(`템플릿 내용: ${configManager.get(this.currentTemplate) || '없음'}`);
       
       // 새 메시지 이벤트 리스너 등록
       console.log('새 메시지 이벤트 리스너 등록 중...');
@@ -266,7 +266,7 @@ class TelegramClientService {
       console.log('메시지 모니터링이 성공적으로 시작되었습니다.');
       
       // 기본 템플릿 설정 (설정되지 않은 경우)
-      if (!this.currentTemplate || !config.SMS_TEMPLATES[this.currentTemplate]) {
+      if (!this.currentTemplate || !configManager.get(this.currentTemplate)) {
         this.currentTemplate = 'default';
         console.log(`기본 템플릿으로 설정: ${this.currentTemplate}`);
       }
@@ -377,7 +377,7 @@ class TelegramClientService {
             
             for (let i = 0; i < templates.length; i++) {
               const templateName = templates[i];
-              const template = config.SMS_TEMPLATES[templateName];
+              const template = configManager.get(templateName);
               
               if (!template) {
                 console.warn(`템플릿 '${templateName}'을 찾을 수 없습니다. 건너뜁니다.`);
@@ -404,7 +404,7 @@ class TelegramClientService {
           } else {
             // 단일 메시지 발송 (기존 방식)
             const templateName = messageSettings.messageTemplate1 || 'default';
-            const template = config.SMS_TEMPLATES[templateName];
+            const template = configManager.get(templateName);
             
             console.log(`단일 메시지 발송: 템플릿 ${templateName}`);
             console.log(`템플릿 내용: ${template}`);
@@ -428,7 +428,7 @@ class TelegramClientService {
   }
 
   setTemplate(templateName) {
-    if (config.SMS_TEMPLATES[templateName]) {
+    if (configManager.get(templateName)) {
       this.currentTemplate = templateName;
       console.log(`템플릿이 "${templateName}"으로 변경되었습니다.`);
       return true;
