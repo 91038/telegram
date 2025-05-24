@@ -1,0 +1,328 @@
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">텔레그램 API 설정</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="telegramApiId" class="form-label">API ID</label>
+                    <input type="text" class="form-control" id="telegramApiId" value="<%= telegramSettings.apiId %>" readonly>
+                    <div class="form-text">
+                        API ID는 .env 파일에서 수정할 수 있습니다.
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="telegramApiHash" class="form-label">API Hash</label>
+                    <input type="text" class="form-control" id="telegramApiHash" value="********" readonly>
+                    <div class="form-text">
+                        API Hash는 .env 파일에서 수정할 수 있습니다.
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    설정을 변경하려면 .env 파일을 직접 수정하고 서버를 재시작해야 합니다.
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">텔레그램 연결 상태</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <h6>연결 상태</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <% if (telegramSettings.isConnected) { %>
+                                <span class="badge bg-success">연결됨</span>
+                            <% } else { %>
+                                <span class="badge bg-danger">연결 안됨</span>
+                            <% } %>
+                        </div>
+                        <button class="btn btn-sm btn-primary" id="loginButton">
+                            로그인
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h6>모니터링 중인 채팅방</h6>
+                    <div class="list-group">
+                        <% if (telegramSettings.targetChats && telegramSettings.targetChats.length > 0) { %>
+                            <% telegramSettings.targetChats.forEach(chat => { %>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong><%= chat.name || chat.id %></strong>
+                                        <small class="text-muted d-block"><%= chat.id %></small>
+                                    </div>
+                                    <button class="btn btn-sm btn-danger remove-chat" data-id="<%= chat.id %>">
+                                        제거
+                                    </button>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <div class="list-group-item text-center text-muted">
+                                모니터링 중인 채팅방이 없습니다.
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h6>새 채팅방 추가</h6>
+                    <form id="addChatForm" class="row g-3">
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" id="chatIdentifier" 
+                                   placeholder="채팅방 ID 또는 사용자명" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">추가</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6" id="loginFormContainer" style="display: none;">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">텔레그램 로그인</h5>
+            </div>
+            <div class="card-body">
+                <div id="loginStep1">
+                    <div class="mb-3">
+                        <label for="phoneNumber" class="form-label">전화번호</label>
+                        <input type="text" class="form-control" id="phoneNumber" placeholder="+821012345678">
+                        <div class="form-text">국제 형식으로 입력하세요 (예: +821012345678)</div>
+                    </div>
+                    <button class="btn btn-primary" id="sendCode">인증 코드 요청</button>
+                </div>
+                
+                <div id="loginStep2" style="display: none;">
+                    <div class="alert alert-info">
+                        텔레그램에서 인증 코드가 전송되었습니다. 코드를 입력하세요.
+                    </div>
+                    <div class="mb-3">
+                        <label for="verificationCode" class="form-label">인증 코드</label>
+                        <input type="text" class="form-control" id="verificationCode">
+                    </div>
+                    <button class="btn btn-primary" id="submitCode">코드 확인</button>
+                </div>
+                
+                <div id="loginStep3" style="display: none;">
+                    <div class="alert alert-info">
+                        2단계 인증이 설정되어 있습니다. 비밀번호를 입력하세요.
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">비밀번호</label>
+                        <input type="password" class="form-control" id="password">
+                    </div>
+                    <button class="btn btn-primary" id="submitPassword">비밀번호 확인</button>
+                </div>
+                
+                <div id="loginSuccess" style="display: none;">
+                    <div class="alert alert-success">
+                        <strong>성공!</strong> 텔레그램 계정 연결이 완료되었습니다.
+                    </div>
+                    <button class="btn btn-primary" onclick="location.reload()">확인</button>
+                </div>
+                
+                <div id="loginError" style="display: none;">
+                    <div class="alert alert-danger">
+                        <strong>오류 발생!</strong> <span id="errorMessage"></span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="location.reload()">다시 시도</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 텔레그램 로그인 폼 표시
+    document.getElementById('loginButton').addEventListener('click', function() {
+        document.getElementById('loginFormContainer').style.display = 'block';
+        document.getElementById('loginStep1').style.display = 'block';
+        document.getElementById('loginStep2').style.display = 'none';
+        document.getElementById('loginStep3').style.display = 'none';
+        document.getElementById('loginSuccess').style.display = 'none';
+        document.getElementById('loginError').style.display = 'none';
+    });
+    
+    // 인증 코드 요청
+    document.getElementById('sendCode').addEventListener('click', function() {
+        const phoneNumber = document.getElementById('phoneNumber').value.trim();
+        
+        if (!phoneNumber) {
+            alert('전화번호를 입력해주세요.');
+            return;
+        }
+        
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 요청 중...';
+        
+        fetch('/api/telegram/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ phoneNumber })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('loginStep1').style.display = 'none';
+                document.getElementById('loginStep2').style.display = 'block';
+                window.phoneCodeHash = data.phoneCodeHash;
+                window.phoneNumber = phoneNumber;
+            } else {
+                document.getElementById('loginStep1').style.display = 'none';
+                document.getElementById('loginError').style.display = 'block';
+                document.getElementById('errorMessage').textContent = data.error;
+            }
+        })
+        .catch(error => {
+            document.getElementById('loginStep1').style.display = 'none';
+            document.getElementById('loginError').style.display = 'block';
+            document.getElementById('errorMessage').textContent = '서버 오류가 발생했습니다.';
+        })
+        .finally(() => {
+            document.getElementById('sendCode').disabled = false;
+            document.getElementById('sendCode').textContent = '인증 코드 요청';
+        });
+    });
+    
+    // 인증 코드 확인
+    document.getElementById('submitCode').addEventListener('click', function() {
+        const code = document.getElementById('verificationCode').value.trim();
+        
+        if (!code) {
+            alert('인증 코드를 입력해주세요.');
+            return;
+        }
+        
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 확인 중...';
+        
+        fetch('/api/telegram/verify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                phoneNumber: window.phoneNumber,
+                phoneCodeHash: window.phoneCodeHash,
+                code
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.requiresPassword) {
+                    document.getElementById('loginStep2').style.display = 'none';
+                    document.getElementById('loginStep3').style.display = 'block';
+                } else {
+                    document.getElementById('loginStep2').style.display = 'none';
+                    document.getElementById('loginSuccess').style.display = 'block';
+                }
+            } else {
+                document.getElementById('loginStep2').style.display = 'none';
+                document.getElementById('loginError').style.display = 'block';
+                document.getElementById('errorMessage').textContent = data.error;
+            }
+        })
+        .catch(error => {
+            document.getElementById('loginStep2').style.display = 'none';
+            document.getElementById('loginError').style.display = 'block';
+            document.getElementById('errorMessage').textContent = '서버 오류가 발생했습니다.';
+        })
+        .finally(() => {
+            document.getElementById('submitCode').disabled = false;
+            document.getElementById('submitCode').textContent = '코드 확인';
+        });
+    });
+    
+    // 비밀번호 확인
+    document.getElementById('submitPassword').addEventListener('click', function() {
+        const password = document.getElementById('password').value;
+        
+        if (!password) {
+            alert('비밀번호를 입력해주세요.');
+            return;
+        }
+        
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 확인 중...';
+        
+        fetch('/api/telegram/submit-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ password })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('loginStep3').style.display = 'none';
+                document.getElementById('loginSuccess').style.display = 'block';
+            } else {
+                document.getElementById('loginStep3').style.display = 'none';
+                document.getElementById('loginError').style.display = 'block';
+                document.getElementById('errorMessage').textContent = data.error;
+            }
+        })
+        .catch(error => {
+            document.getElementById('loginStep3').style.display = 'none';
+            document.getElementById('loginError').style.display = 'block';
+            document.getElementById('errorMessage').textContent = '서버 오류가 발생했습니다.';
+        })
+        .finally(() => {
+            document.getElementById('submitPassword').disabled = false;
+            document.getElementById('submitPassword').textContent = '비밀번호 확인';
+        });
+    });
+
+    // 채팅방 제거
+    document.querySelectorAll('.remove-chat').forEach(button => {
+        button.addEventListener('click', async function() {
+            const chatId = this.getAttribute('data-id');
+            if (confirm('정말로 이 채팅방을 모니터링 목록에서 제거하시겠습니까?')) {
+                try {
+                    const response = await fetch(`/api/chat/${chatId}`, { method: 'DELETE' });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert('채팅방이 제거되었습니다.');
+                        location.reload();
+                    } else {
+                        alert(data.error || '채팅방 제거에 실패했습니다.');
+                    }
+                } catch (error) {
+                    alert('채팅방 제거 중 오류가 발생했습니다.');
+                }
+            }
+        });
+    });
+
+    // 새 채팅방 추가
+    document.getElementById('addChatForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const identifier = document.getElementById('chatIdentifier').value.trim();
+        
+        try {
+            const response = await fetch(`/api/chat/${identifier}`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                alert('채팅방이 추가되었습니다.');
+                location.reload();
+            } else {
+                alert(data.error || '채팅방 추가에 실패했습니다.');
+            }
+        } catch (error) {
+            alert('채팅방 추가 중 오류가 발생했습니다.');
+        }
+    });
+</script> 

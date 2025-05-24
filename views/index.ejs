@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-connected { background-color: #28a745; }
+        .status-disconnected { background-color: #dc3545; }
+        .status-waiting { background-color: #ffc107; }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+        }
+        .btn-gradient:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="bi bi-telegram text-primary"></i>
+                    텔레그램 자동 문자 발송 시스템
+                </h1>
+            </div>
+        </div>
+
+        <!-- 상태 표시 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-telegram"></i> 텔레그램 상태
+                    </div>
+                    <div class="card-body">
+                        <div id="telegram-status">
+                            <% if (telegramState.isConnected) { %>
+                                <span class="status-indicator status-connected"></span>
+                                연결됨
+                            <% } else if (telegramState.isWaitingForCode) { %>
+                                <span class="status-indicator status-waiting"></span>
+                                인증 코드 대기 중
+                            <% } else if (telegramState.isWaitingForPassword) { %>
+                                <span class="status-indicator status-waiting"></span>
+                                2단계 인증 대기 중
+                            <% } else { %>
+                                <span class="status-indicator status-disconnected"></span>
+                                연결 안됨
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-chat-text"></i> SMS 상태
+                    </div>
+                    <div class="card-body">
+                        <div id="sms-status">
+                            <span class="status-indicator status-disconnected"></span>
+                            확인 중...
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="checkSMSCredits()">
+                            <i class="bi bi-arrow-clockwise"></i> 크레딧 확인
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 텔레그램 로그인 -->
+        <% if (!telegramState.isConnected) { %>
+        <div class="row mb-4" id="login-section">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-key"></i> 텔레그램 로그인
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            텔레그램에 로그인하여 채팅방 모니터링을 시작하세요.
+                        </div>
+                        
+                        <div id="login-step-1" <% if (telegramState.isWaitingForCode || telegramState.isWaitingForPassword) { %>style="display: none;"<% } %>>
+                            <div class="mb-3">
+                                <label for="phoneNumber" class="form-label">전화번호</label>
+                                <input type="text" class="form-control" id="phoneNumber" placeholder="+821012345678" value="<%= telegramState.phoneNumber || '' %>">
+                                <div class="form-text">국가 코드를 포함하여 입력하세요 (예: +821012345678)</div>
+                            </div>
+                            <button class="btn btn-gradient" onclick="sendCode()">
+                                <i class="bi bi-send"></i> 인증 코드 요청
+                            </button>
+                        </div>
+
+                        <div id="login-step-2" <% if (!telegramState.isWaitingForCode) { %>style="display: none;"<% } %>>
+                            <div class="mb-3">
+                                <label for="verificationCode" class="form-label">인증 코드</label>
+                                <input type="text" class="form-control" id="verificationCode" placeholder="12345">
+                                <div class="form-text">텔레그램으로 받은 인증 코드를 입력하세요</div>
+                            </div>
+                            <button class="btn btn-gradient" onclick="verifyCode()">
+                                <i class="bi bi-check-circle"></i> 인증 코드 확인
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="resetLogin()">
+                                <i class="bi bi-arrow-left"></i> 다시 시작
+                            </button>
+                        </div>
+
+                        <div id="login-step-3" <% if (!telegramState.isWaitingForPassword) { %>style="display: none;"<% } %>>
+                            <div class="mb-3">
+                                <label for="twoFactorPassword" class="form-label">2단계 인증 비밀번호</label>
+                                <input type="password" class="form-control" id="twoFactorPassword" placeholder="비밀번호">
+                                <div class="form-text">텔레그램 2단계 인증 비밀번호를 입력하세요</div>
+                            </div>
+                            <button class="btn btn-gradient" onclick="verifyPassword()">
+                                <i class="bi bi-shield-check"></i> 2단계 인증 확인
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="resetLogin()">
+                                <i class="bi bi-arrow-left"></i> 다시 시작
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <% } else { %>
+        <!-- 로그인 성공 메시지 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i>
+                    <strong>텔레그램 로그인 성공!</strong> 이제 채팅방 모니터링을 설정할 수 있습니다.
+                </div>
+            </div>
+        </div>
+        <% } %>
+
+        <!-- 메시지 템플릿 설정 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-chat-square-text"></i> 메시지 템플릿 설정
+                    </div>
+                    <div class="card-body">
+                        <form id="settingsForm">
+                            <div class="mb-3">
+                                <label for="template1" class="form-label">메시지 템플릿 1</label>
+                                <textarea class="form-control" id="template1" name="MESSAGE_TEMPLATE_1" rows="3"><%= config.MESSAGE_TEMPLATE_1 || '' %></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="template2" class="form-label">메시지 템플릿 2</label>
+                                <textarea class="form-control" id="template2" name="MESSAGE_TEMPLATE_2" rows="3"><%= config.MESSAGE_TEMPLATE_2 || '' %></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="template3" class="form-label">메시지 템플릿 3</label>
+                                <textarea class="form-control" id="template3" name="MESSAGE_TEMPLATE_3" rows="3"><%= config.MESSAGE_TEMPLATE_3 || '' %></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="chatId" class="form-label">모니터링할 채팅방 ID 또는 사용자명</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="chatId" name="TELEGRAM_CHAT_ID" value="<%= config.TELEGRAM_CHAT_ID || '' %>" placeholder="-1001234567890 또는 @username">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="searchChat()">
+                                        <i class="bi bi-search"></i> 검색
+                                    </button>
+                                </div>
+                                <div class="form-text">채팅방 ID(-1001234567890) 또는 사용자명(@username)을 입력하세요</div>
+                                <div id="chat-search-result" class="mt-2"></div>
+                            </div>
+                            <button type="submit" class="btn btn-gradient">
+                                <i class="bi bi-save"></i> 설정 저장
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SMS 테스트 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-phone"></i> SMS 테스트 발송
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="testPhoneNumber" class="form-label">테스트 전화번호</label>
+                                    <input type="text" class="form-control" id="testPhoneNumber" placeholder="01012345678">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="testMessage" class="form-label">테스트 메시지</label>
+                                    <input type="text" class="form-control" id="testMessage" placeholder="테스트 메시지입니다.">
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-primary" onclick="sendTestSMS()">
+                            <i class="bi bi-send"></i> 테스트 발송
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 모니터링 제어 -->
+        <% if (telegramState.isConnected) { %>
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-eye"></i> 모니터링 제어
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">텔레그램 채팅방에서 전화번호가 포함된 메시지를 감지하면 자동으로 SMS를 발송합니다.</p>
+                        
+                        <div class="mb-3">
+                            <label for="monitoringChatId" class="form-label">모니터링할 채팅방</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="monitoringChatId" placeholder="-1001234567890 또는 @username" value="<%= config.TELEGRAM_CHAT_ID || '' %>">
+                                <button class="btn btn-outline-secondary" type="button" onclick="searchMonitoringChat()">
+                                    <i class="bi bi-search"></i> 검색
+                                </button>
+                            </div>
+                            <div id="monitoring-chat-result" class="mt-2"></div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success" onclick="startMonitoring()" <% if (telegramState.isMonitoring) { %>disabled<% } %>>
+                                <i class="bi bi-play-circle"></i> 모니터링 시작
+                            </button>
+                            <button class="btn btn-danger" onclick="stopMonitoring()" <% if (!telegramState.isMonitoring) { %>disabled<% } %>>
+                                <i class="bi bi-stop-circle"></i> 모니터링 중지
+                            </button>
+                        </div>
+                        
+                        <div id="monitoring-status" class="mt-3">
+                            <% if (telegramState.isMonitoring) { %>
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle"></i> 모니터링이 활성화되었습니다.
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <% } %>
+    </div>
+
+    <!-- 알림 토스트 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">알림</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-body">
+                메시지가 여기에 표시됩니다.
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 토스트 표시 함수
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastBody = document.getElementById('toast-body');
+            const toastHeader = toast.querySelector('.toast-header');
+            
+            toastBody.textContent = message;
+            
+            // 타입에 따른 색상 변경
+            toastHeader.className = 'toast-header';
+            if (type === 'success') {
+                toastHeader.classList.add('bg-success', 'text-white');
+            } else if (type === 'error') {
+                toastHeader.classList.add('bg-danger', 'text-white');
+            } else if (type === 'warning') {
+                toastHeader.classList.add('bg-warning');
+            }
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+
+        // 텔레그램 초기화
+        let isInitializing = false;
+        async function initTelegram() {
+            // 이미 초기화 중이거나 연결되어 있으면 건너뛰기
+            if (isInitializing) {
+                console.log('이미 초기화 중입니다.');
+                return;
+            }
+
+            // 현재 상태가 연결됨이면 건너뛰기
+            const currentStatus = document.getElementById('telegram-status');
+            if (currentStatus && currentStatus.innerHTML.includes('연결됨')) {
+                console.log('이미 연결되어 있습니다.');
+                return;
+            }
+
+            isInitializing = true;
+            try {
+                const response = await fetch('/api/telegram/init', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success && !result.needsLogin) {
+                    showToast('텔레그램에 이미 로그인되어 있습니다.', 'success');
+                    // 페이지 새로고침 대신 상태만 업데이트
+                    updateTelegramStatus('connected');
+                    hideLoginSection();
+                } else if (result.message) {
+                    console.log('초기화 상태:', result.message);
+                }
+            } catch (error) {
+                console.error('텔레그램 초기화 오류:', error);
+            } finally {
+                isInitializing = false;
+            }
+        }
+
+        // 텔레그램 상태 업데이트 함수
+        function updateTelegramStatus(status) {
+            const statusElement = document.getElementById('telegram-status');
+            if (!statusElement) return;
+
+            switch (status) {
+                case 'connected':
+                    statusElement.innerHTML = '<span class="status-indicator status-connected"></span>연결됨';
+                    break;
+                case 'waiting-code':
+                    statusElement.innerHTML = '<span class="status-indicator status-waiting"></span>인증 코드 대기 중';
+                    break;
+                case 'waiting-password':
+                    statusElement.innerHTML = '<span class="status-indicator status-waiting"></span>2단계 인증 대기 중';
+                    break;
+                default:
+                    statusElement.innerHTML = '<span class="status-indicator status-disconnected"></span>연결 안됨';
+            }
+        }
+
+        // 인증 코드 요청
+        async function sendCode() {
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            if (!phoneNumber) {
+                showToast('전화번호를 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/telegram/send-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('인증 코드가 발송되었습니다.', 'success');
+                    document.getElementById('login-step-1').style.display = 'none';
+                    document.getElementById('login-step-2').style.display = 'block';
+                } else {
+                    showToast(result.error || '인증 코드 요청에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 인증 코드 확인
+        async function verifyCode() {
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const code = document.getElementById('verificationCode').value;
+            
+            if (!code) {
+                showToast('인증 코드를 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/telegram/verify-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber, code })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('로그인 성공!', 'success');
+                    setTimeout(() => {
+                        updateTelegramStatus('connected');
+                        hideLoginSection();
+                    }, 1000);
+                } else if (result.needsPassword) {
+                    showToast('2단계 인증이 필요합니다.', 'warning');
+                    document.getElementById('login-step-2').style.display = 'none';
+                    document.getElementById('login-step-3').style.display = 'block';
+                } else {
+                    showToast(result.error || '인증 코드 확인에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 2단계 인증
+        async function verifyPassword() {
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const code = document.getElementById('verificationCode').value;
+            const password = document.getElementById('twoFactorPassword').value;
+            
+            if (!password) {
+                showToast('2단계 인증 비밀번호를 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/telegram/verify-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber, code, password })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('로그인 성공!', 'success');
+                    setTimeout(() => {
+                        updateTelegramStatus('connected');
+                        hideLoginSection();
+                    }, 1000);
+                } else {
+                    showToast(result.error || '2단계 인증에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 로그인 초기화
+        function resetLogin() {
+            document.getElementById('login-step-1').style.display = 'block';
+            document.getElementById('login-step-2').style.display = 'none';
+            document.getElementById('login-step-3').style.display = 'none';
+            document.getElementById('verificationCode').value = '';
+            document.getElementById('twoFactorPassword').value = '';
+        }
+
+        // 설정 저장
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('설정이 저장되었습니다.', 'success');
+                } else {
+                    showToast(result.error || '설정 저장에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        });
+
+        // SMS 크레딧 확인
+        let isCheckingCredits = false;
+        async function checkSMSCredits() {
+            if (isCheckingCredits) {
+                console.log('이미 크레딧 확인 중입니다.');
+                return;
+            }
+
+            isCheckingCredits = true;
+            try {
+                const response = await fetch('/api/sms/credits');
+                const result = await response.json();
+                
+                const statusElement = document.getElementById('sms-status');
+                
+                if (result.success) {
+                    statusElement.innerHTML = `
+                        <span class="status-indicator status-connected"></span>
+                        연결됨 (잔여: ${result.balanceCredits}크레딧, SMS: ${result.availableCounts.sms}회)
+                    `;
+                } else {
+                    statusElement.innerHTML = `
+                        <span class="status-indicator status-disconnected"></span>
+                        연결 실패: ${result.error}
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('sms-status').innerHTML = `
+                    <span class="status-indicator status-disconnected"></span>
+                    오류 발생
+                `;
+            } finally {
+                isCheckingCredits = false;
+            }
+        }
+
+        // SMS 테스트 발송
+        async function sendTestSMS() {
+            const phoneNumber = document.getElementById('testPhoneNumber').value;
+            const message = document.getElementById('testMessage').value;
+            
+            if (!phoneNumber || !message) {
+                showToast('전화번호와 메시지를 모두 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sms/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber, message })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('SMS 발송 성공!', 'success');
+                } else {
+                    showToast(result.error || 'SMS 발송에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 채팅방 검색
+        async function searchChat() {
+            const chatIdOrUsername = document.getElementById('chatId').value;
+            if (!chatIdOrUsername) {
+                showToast('채팅방 ID 또는 사용자명을 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/telegram/find-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatIdOrUsername })
+                });
+                
+                const result = await response.json();
+                const resultDiv = document.getElementById('chat-search-result');
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> 
+                            채팅방 찾음: <strong>${result.title}</strong> (ID: ${result.chatId})
+                        </div>
+                    `;
+                    // 찾은 채팅방 ID를 입력 필드에 설정
+                    document.getElementById('chatId').value = result.chatId;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-circle"></i> 
+                            ${result.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                showToast('채팅방 검색 중 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 모니터링용 채팅방 검색
+        async function searchMonitoringChat() {
+            const chatIdOrUsername = document.getElementById('monitoringChatId').value;
+            if (!chatIdOrUsername) {
+                showToast('채팅방 ID 또는 사용자명을 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/telegram/find-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatIdOrUsername })
+                });
+                
+                const result = await response.json();
+                const resultDiv = document.getElementById('monitoring-chat-result');
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> 
+                            채팅방 찾음: <strong>${result.title}</strong> (ID: ${result.chatId})
+                        </div>
+                    `;
+                    // 찾은 채팅방 ID를 입력 필드에 설정
+                    document.getElementById('monitoringChatId').value = result.chatId;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-circle"></i> 
+                            ${result.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                showToast('채팅방 검색 중 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 모니터링 시작
+        async function startMonitoring() {
+            const chatIdOrUsername = document.getElementById('monitoringChatId').value;
+            
+            if (!chatIdOrUsername) {
+                showToast('모니터링할 채팅방을 입력해주세요.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/monitoring/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatIdOrUsername })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(result.message || '모니터링이 시작되었습니다!', 'success');
+                    document.getElementById('monitoring-status').innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> ${result.message}
+                        </div>
+                    `;
+                    // 버튼 상태 업데이트
+                    updateMonitoringButtons(true);
+                } else {
+                    showToast(result.error || '모니터링 시작에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 모니터링 중지
+        async function stopMonitoring() {
+            try {
+                const response = await fetch('/api/monitoring/stop', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(result.message || '모니터링이 중지되었습니다.', 'success');
+                    document.getElementById('monitoring-status').innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 모니터링이 중지되었습니다.
+                        </div>
+                    `;
+                    // 버튼 상태 업데이트
+                    updateMonitoringButtons(false);
+                } else {
+                    showToast(result.error || '모니터링 중지에 실패했습니다.', 'error');
+                }
+            } catch (error) {
+                showToast('서버 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        // 모니터링 버튼 상태 업데이트
+        function updateMonitoringButtons(isMonitoring) {
+            const startBtn = document.querySelector('button[onclick="startMonitoring()"]');
+            const stopBtn = document.querySelector('button[onclick="stopMonitoring()"]');
+            
+            if (startBtn) startBtn.disabled = isMonitoring;
+            if (stopBtn) stopBtn.disabled = !isMonitoring;
+        }
+
+        // 로그인 섹션 숨기기
+        function hideLoginSection() {
+            const loginSection = document.getElementById('login-section');
+            if (loginSection) {
+                loginSection.style.display = 'none';
+            }
+            
+            // 성공 메시지 표시
+            const container = document.querySelector('.container');
+            const successAlert = document.createElement('div');
+            successAlert.className = 'row mb-4';
+            successAlert.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i>
+                        <strong>텔레그램 로그인 성공!</strong> 이제 채팅방 모니터링을 설정할 수 있습니다.
+                    </div>
+                </div>
+            `;
+            
+            // 상태 표시 다음에 삽입
+            const statusRow = document.querySelector('.row.mb-4');
+            if (statusRow && statusRow.nextSibling) {
+                container.insertBefore(successAlert, statusRow.nextSibling);
+            }
+            
+            // 모니터링 섹션 표시
+            showMonitoringSection();
+        }
+
+        // 모니터링 섹션 표시
+        function showMonitoringSection() {
+            const container = document.querySelector('.container');
+            const monitoringSection = document.createElement('div');
+            monitoringSection.className = 'row mb-4';
+            monitoringSection.id = 'monitoring-section';
+            monitoringSection.innerHTML = `
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-eye"></i> 모니터링 제어
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-3">텔레그램 채팅방에서 전화번호가 포함된 메시지를 감지하면 자동으로 SMS를 발송합니다.</p>
+                            
+                            <div class="mb-3">
+                                <label for="monitoringChatId" class="form-label">모니터링할 채팅방</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="monitoringChatId" placeholder="-1001234567890 또는 @username" value="">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="searchMonitoringChat()">
+                                        <i class="bi bi-search"></i> 검색
+                                    </button>
+                                </div>
+                                <div id="monitoring-chat-result" class="mt-2"></div>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-success" onclick="startMonitoring()">
+                                    <i class="bi bi-play-circle"></i> 모니터링 시작
+                                </button>
+                                <button class="btn btn-danger" onclick="stopMonitoring()" disabled>
+                                    <i class="bi bi-stop-circle"></i> 모니터링 중지
+                                </button>
+                            </div>
+                            
+                            <div id="monitoring-status" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // SMS 테스트 섹션 다음에 삽입
+            const smsTestSection = document.querySelector('.container .row:nth-last-child(2)');
+            if (smsTestSection) {
+                container.insertBefore(monitoringSection, smsTestSection.nextSibling);
+            } else {
+                container.appendChild(monitoringSection);
+            }
+        }
+
+        // 페이지 로드 시 초기화
+        let isPageInitialized = false;
+        document.addEventListener('DOMContentLoaded', () => {
+            if (isPageInitialized) return;
+            isPageInitialized = true;
+            
+            console.log('페이지 초기화 시작');
+            initTelegram();
+            checkSMSCredits();
+        });
+    </script>
+</body>
+</html> 

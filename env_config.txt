@@ -1,0 +1,15 @@
+# 텔레그램 API 설정 (https://my.telegram.org에서 생성)
+TELEGRAM_API_ID=YOUR_API_ID
+TELEGRAM_API_HASH=YOUR_API_HASH
+TELEGRAM_SESSION=
+
+# 모니터링할 채팅방 목록 (쉼표로 구분, 사용자명 또는 채팅방 ID)
+TELEGRAM_TARGET_CHATS=
+
+# SMS API 설정
+SMS_API_KEY=
+SMS_API_SECRET=
+SMS_SENDER_NUMBER=
+
+# 서버 설정
+PORT=3005 

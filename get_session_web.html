@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>텔레그램 세션 추출 가이드</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .step {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #sessionOutput {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            min-height: 100px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 텔레그램 세션 추출 가이드</h1>
+    
+    <div class="warning">
+        <strong>⚠️ 주의사항:</strong>
+        <ul>
+            <li>세션 문자열은 여러분의 텔레그램 계정에 직접 접근할 수 있는 중요한 정보입니다.</li>
+            <li>절대 다른 사람과 공유하지 마세요.</li>
+            <li>안전한 곳에 보관하고, 필요 없어지면 삭제하세요.</li>
+        </ul>
+    </div>
+
+    <h2>📋 단계별 가이드</h2>
+
+    <div class="step">
+        <h3>1단계: 텔레그램 웹 로그인</h3>
+        <p>새 탭에서 <strong>web.telegram.org</strong>로 이동하여 로그인하세요.</p>
+        <button onclick="window.open('https://web.telegram.org', '_blank')">텔레그램 웹 열기</button>
+    </div>
+
+    <div class="step">
+        <h3>2단계: 개발자 도구 열기</h3>
+        <p>텔레그램 웹에서 로그인 완료 후:</p>
+        <ul>
+            <li><strong>Chrome/Edge:</strong> F12 키 또는 Ctrl+Shift+I</li>
+            <li><strong>Firefox:</strong> F12 키 또는 Ctrl+Shift+I</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>3단계: Console 탭으로 이동</h3>
+        <p>개발자 도구에서 <strong>"Console"</strong> 탭을 클릭하세요.</p>
+    </div>
+
+    <div class="step">
+        <h3>4단계: 세션 추출 코드 실행</h3>
+        <p>아래 코드를 복사해서 Console에 붙여넣고 Enter를 누르세요:</p>
+        
+        <div class="code" id="extractCode">
+// 텔레그램 웹 세션 추출
+function extractTelegramSession() {
+    try {
+        // LocalStorage에서 세션 정보 찾기
+        const keys = Object.keys(localStorage);
+        let sessionData = null;
+        
+        // 가능한 세션 키들 확인
+        const sessionKeys = keys.filter(key => 
+            key.includes('session') || 
+            key.includes('auth') || 
+            key.includes('dc') ||
+            key.startsWith('user_auth') ||
+            key.startsWith('tt-global-state')
+        );
+        
+        console.log('발견된 세션 관련 키들:', sessionKeys);
+        
+        // MTProto 세션 정보 추출 시도
+        for (let key of sessionKeys) {
+            const value = localStorage.getItem(key);
+            if (value && value.length > 50) {
+                console.log(`키: ${key}`);
+                console.log(`값: ${value.substring(0, 100)}...`);
+                if (!sessionData && value.includes('dc')) {
+                    sessionData = value;
+                }
+            }
+        }
+        
+        // IndexedDB에서도 확인
+        if (!sessionData) {
+            console.log('LocalStorage에서 찾지 못함. IndexedDB 확인 중...');
+            
+            // IndexedDB 열기
+            const request = indexedDB.open('tt');
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                const storeNames = db.objectStoreNames;
+                console.log('IndexedDB 스토어들:', Array.from(storeNames));
+                
+                if (storeNames.contains('sessions') || storeNames.contains('auth')) {
+                    const transaction = db.transaction(Array.from(storeNames), 'readonly');
+                    
+                    for (let storeName of storeNames) {
+                        const store = transaction.objectStore(storeName);
+                        const getAllRequest = store.getAll();
+                        
+                        getAllRequest.onsuccess = function() {
+                            const results = getAllRequest.result;
+                            console.log(`${storeName} 데이터:`, results);
+                            
+                            results.forEach(item => {
+                                if (item && typeof item === 'object') {
+                                    Object.keys(item).forEach(key => {
+                                        const value = item[key];
+                                        if (typeof value === 'string' && value.length > 50) {
+                                            console.log(`발견된 세션 후보: ${value.substring(0, 100)}...`);
+                                        }
+                                    });
+                                }
+                            });
+                        };
+                    }
+                }
+            };
+        }
+        
+        // 결과 출력
+        if (sessionData) {
+            console.log('🎉 세션 데이터 발견!');
+            console.log('세션 문자열:', sessionData);
+            return sessionData;
+        } else {
+            console.log('❌ 세션 데이터를 찾을 수 없습니다.');
+            console.log('💡 가능한 해결 방법:');
+            console.log('1. 텔레그램 웹에서 완전히 로그인되었는지 확인');
+            console.log('2. 메시지를 하나 보내거나 받아보세요');
+            console.log('3. 페이지를 새로고침하고 다시 시도');
+            return null;
+        }
+        
+    } catch (error) {
+        console.error('세션 추출 중 오류:', error);
+        return null;
+    }
+}
+
+// 실행
+const session = extractTelegramSession();
+if (session) {
+    console.log('');
+    console.log('='.repeat(50));
+    console.log('📋 복사할 세션 문자열:');
+    console.log(session);
+    console.log('='.repeat(50));
+}
+        </div>
+        
+        <button onclick="copyCode()">코드 복사</button>
+    </div>
+
+    <div class="step">
+        <h3>5단계: 세션 문자열 복사</h3>
+        <p>Console에 출력된 세션 문자열을 복사하세요. 보통 <code>1BVtsOG8AAA...</code>와 같은 형태입니다.</p>
+    </div>
+
+    <div class="step">
+        <h3>6단계: 웹사이트에서 사용</h3>
+        <p>복사한 세션 문자열을 SMS 자동 발송 시스템에 입력하세요:</p>
+        <ol>
+            <li>http://localhost:3000 접속</li>
+            <li>"세션으로 연결" 영역에 붙여넣기</li>
+            <li>"세션으로 연결" 버튼 클릭</li>
+        </ol>
+    </div>
+
+    <div class="success">
+        <h3>✅ 대안 방법</h3>
+        <p>위 방법이 작동하지 않는 경우:</p>
+        <ol>
+            <li><strong>MTProto 세션 생성기 사용:</strong> 온라인 툴 검색</li>
+            <li><strong>Pyrogram 라이브러리:</strong> Python으로 간단한 세션 생성</li>
+            <li><strong>Telethon:</strong> Python 텔레그램 라이브러리 사용</li>
+        </ol>
+    </div>
+
+    <h2>🔍 추출된 세션 확인</h2>
+    <div id="sessionOutput">
+        여기에 추출된 세션 문자열이 표시됩니다...
+    </div>
+    
+    <button onclick="testSession()">세션 문자열 테스트</button>
+    <button onclick="clearSession()">지우기</button>
+
+    <script>
+        function copyCode() {
+            const code = document.getElementById('extractCode').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('코드가 클립보드에 복사되었습니다!');
+            });
+        }
+
+        function testSession() {
+            const session = prompt('세션 문자열을 입력하세요:');
+            if (session) {
+                const output = document.getElementById('sessionOutput');
+                if (session.length < 50) {
+                    output.innerHTML = '<span style="color: red;">❌ 너무 짧은 세션 문자열입니다. 올바른 세션인지 확인하세요.</span>';
+                } else if (session.length > 500) {
+                    output.innerHTML = '<span style="color: red;">❌ 너무 긴 문자열입니다. 세션 문자열만 복사했는지 확인하세요.</span>';
+                } else {
+                    output.innerHTML = `
+                        <span style="color: green;">✅ 올바른 형태의 세션 문자열입니다!</span><br><br>
+                        <strong>세션 문자열:</strong><br>
+                        <code style="word-break: break-all; background: #f8f9fa; padding: 5px;">${session}</code><br><br>
+                        <small>이 세션을 SMS 시스템에 입력하세요.</small>
+                    `;
+                }
+            }
+        }
+
+        function clearSession() {
+            document.getElementById('sessionOutput').innerHTML = '여기에 추출된 세션 문자열이 표시됩니다...';
+        }
+    </script>
+</body>
+</html> 
