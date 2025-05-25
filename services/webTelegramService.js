@@ -3,6 +3,7 @@ const { StringSession } = require('telegram/sessions');
 const { NewMessage } = require('telegram/events');
 const { Api } = require('telegram');
 const configManager = require('../utils/configManager');
+const phoneExtractor = require('../utils/phoneExtractor');
 
 class WebTelegramService {
     constructor() {
@@ -327,8 +328,15 @@ class WebTelegramService {
 
                     console.log(`새 메시지 수신: ${message.message}`);
 
-                    const phonePattern = /010[-\s]?\d{4}[-\s]?\d{4}/g;
-                    const phoneNumbers = message.message.match(phonePattern);
+                    // 새로운 전화번호 추출기 사용
+                    const analysisResult = phoneExtractor.analyzeMessage(message.message);
+                    const phoneNumbers = analysisResult.phoneNumbers;
+
+                    console.log(`전화번호 분석 결과:`, {
+                        발견된_번호_개수: analysisResult.count,
+                        추출된_번호들: phoneNumbers,
+                        포맷된_번호들: analysisResult.formattedNumbers
+                    });
 
                     if (phoneNumbers && phoneNumbers.length > 0) {
                         console.log(`전화번호 발견: ${phoneNumbers.join(', ')}`);
@@ -336,7 +344,8 @@ class WebTelegramService {
                         const smsService = require('./smsService');
 
                         for (const phoneNumber of phoneNumbers) {
-                            const cleanNumber = phoneNumber.replace(/[-\s]/g, '');
+                            // 전화번호는 이미 정리된 상태
+                            const cleanNumber = phoneNumber;
                             
                             console.log(`${cleanNumber}로 메시지 발송 시작...`);
                             

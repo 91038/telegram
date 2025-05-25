@@ -4,6 +4,7 @@ const { NewMessage } = require('telegram/events');
 const input = require('input');
 const dotenv = require('dotenv');
 const configManager = require('../utils/configManager');
+const phoneExtractor = require('../utils/phoneExtractor');
 const smsService = require('./smsService');
 
 dotenv.config();
@@ -305,18 +306,15 @@ class TelegramClientService {
       
       console.log(`[${chatId}] 메시지 수신: ${messageText}`);
       
-      // 전화번호 추출 (다양한 형식 처리)
-      const phoneNumbersWithHyphen = messageText.match(/01[0-9]-[0-9]{3,4}-[0-9]{4}/g) || [];
-      const phoneNumbersWithoutHyphen = messageText.match(/01[0-9][0-9]{7,8}/g) || [];
+      // 새로운 전화번호 추출기 사용
+      const analysisResult = phoneExtractor.analyzeMessage(messageText);
+      const phoneNumbers = analysisResult.phoneNumbers;
       
-      // 중복 제거를 위해 Set 사용
-      const phoneNumberSet = new Set([
-        ...phoneNumbersWithHyphen,
-        ...phoneNumbersWithoutHyphen
-      ]);
-      
-      const phoneNumbers = [...phoneNumberSet];
-      console.log(`[${chatId}] 발견된 전화번호:`, phoneNumbers);
+      console.log(`[${chatId}] 전화번호 분석 결과:`, {
+        발견된_번호_개수: analysisResult.count,
+        추출된_번호들: phoneNumbers,
+        포맷된_번호들: analysisResult.formattedNumbers
+      });
       
       if (phoneNumbers.length === 0) {
         console.log(`[${chatId}] 메시지에서 전화번호를 찾을 수 없습니다.`);
@@ -358,13 +356,13 @@ class TelegramClientService {
       
       // 각 전화번호에 SMS 발송
       for (const phoneNumber of phoneNumbers) {
-        // 하이픈 제거
-        const cleanNumber = phoneNumber.replace(/-/g, '');
+        // 전화번호는 이미 정리된 상태
+        const cleanNumber = phoneNumber;
         
-        if (cleanNumber.length >= 10 && cleanNumber.length <= 11) {
+        if (phoneExtractor.isValidKoreanPhoneNumber(cleanNumber)) {
           console.log(`[${chatId}] ${cleanNumber}로 SMS 발송 시도 중...`);
           
-          // 다중 메시지 설송인지 확인
+          // 다중 메시지 발송인지 확인
           if (messageSettings.useMultiMessage) {
             // 다중 메시지 발송
             const templates = [
@@ -376,45 +374,35 @@ class TelegramClientService {
             console.log(`다중 메시지 발송: ${templates.length}개 템플릿 사용`);
             
             for (let i = 0; i < templates.length; i++) {
-              const templateName = templates[i];
-              const template = configManager.get(templateName);
-              
-              if (!template) {
-                console.warn(`템플릿 '${templateName}'을 찾을 수 없습니다. 건너뜁니다.`);
-                continue;
-              }
-              
-              console.log(`[${chatId}] ${cleanNumber}로 ${i + 1}번째 메시지 발송: ${templateName}`);
-              console.log(`템플릿 내용: ${template}`);
+              const template = templates[i];
+              console.log(`[${chatId}] 메시지 ${i + 1}/${templates.length} 발송 중: ${template.substring(0, 30)}...`);
               
               const result = await smsService.sendSMS(cleanNumber, template);
               
               if (result.success) {
-                console.log(`[${chatId}] ${cleanNumber}로 ${i + 1}번째 SMS 발송 성공`);
+                console.log(`[${chatId}] ✅ 메시지 ${i + 1} 발송 성공: ${result.messageId}`);
               } else {
-                console.error(`[${chatId}] ${cleanNumber}로 ${i + 1}번째 SMS 발송 실패:`, result.error);
+                console.log(`[${chatId}] ❌ 메시지 ${i + 1} 발송 실패: ${result.error}`);
               }
               
-              // 메시지 간 지연
+              // 메시지 간 대기 시간 (마지막 메시지가 아닌 경우)
               if (i < templates.length - 1) {
-                console.log(`${messageSettings.messageDelay}초 대기 중...`);
-                await new Promise(resolve => setTimeout(resolve, messageSettings.messageDelay * 1000));
+                const delaySeconds = messageSettings.messageDelay || 10;
+                console.log(`[${chatId}] 다음 메시지 발송을 위해 ${delaySeconds}초 대기 중...`);
+                await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
               }
             }
           } else {
-            // 단일 메시지 발송 (기존 방식)
-            const templateName = messageSettings.messageTemplate1 || 'default';
-            const template = configManager.get(templateName);
-            
-            console.log(`단일 메시지 발송: 템플릿 ${templateName}`);
-            console.log(`템플릿 내용: ${template}`);
+            // 단일 메시지 발송
+            const template = messageSettings.messageTemplate1 || 'default';
+            console.log(`[${chatId}] 단일 메시지 발송: ${template.substring(0, 30)}...`);
             
             const result = await smsService.sendSMS(cleanNumber, template);
             
             if (result.success) {
-              console.log(`[${chatId}] ${cleanNumber}로 SMS 발송 성공`);
+              console.log(`[${chatId}] ✅ SMS 발송 성공: ${result.messageId}`);
             } else {
-              console.error(`[${chatId}] ${cleanNumber}로 SMS 발송 실패:`, result.error);
+              console.log(`[${chatId}] ❌ SMS 발송 실패: ${result.error}`);
             }
           }
         } else {
