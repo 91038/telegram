@@ -260,6 +260,25 @@ class WebTelegramService {
 
             if (/^-?\d+$/.test(chatIdOrUsername)) {
                 console.log(`채팅방 ID로 검색: ${chatIdOrUsername}`);
+                try {
+                    // 숫자 ID로 엔티티 가져오기 시도
+                    const entity = await this.client.getEntity(chatIdOrUsername);
+                    if (entity) {
+                        const chatId = entity.id.toString();
+                        const title = entity.title || entity.firstName || entity.username || `채팅방 ID: ${chatIdOrUsername}`;
+                        
+                        console.log(`채팅방 찾음: ${title} (ID: ${chatId})`);
+                        return {
+                            success: true,
+                            chatId: chatId,
+                            title: title
+                        };
+                    }
+                } catch (entityError) {
+                    console.log('엔티티를 찾을 수 없어 ID를 그대로 사용합니다:', entityError.message);
+                }
+                
+                // 엔티티를 찾지 못한 경우 ID를 그대로 사용
                 return {
                     success: true,
                     chatId: chatIdOrUsername,
@@ -323,8 +342,23 @@ class WebTelegramService {
                     const message = event.message;
                     if (!message || !message.message) return;
 
-                    const messageChat = message.chatId || message.peerId?.chatId;
-                    if (messageChat?.toString() !== chatId.toString()) return;
+                    // 메시지의 채팅방 ID 확인 로직 개선
+                    let messageChatId;
+                    if (message.peerId) {
+                        if (message.peerId.chatId) {
+                            messageChatId = message.peerId.chatId.toString();
+                        } else if (message.peerId.channelId) {
+                            messageChatId = message.peerId.channelId.toString();
+                        } else if (message.peerId.userId) {
+                            messageChatId = message.peerId.userId.toString();
+                        }
+                    } else if (message.chatId) {
+                        messageChatId = message.chatId.toString();
+                    }
+
+                    if (!messageChatId || messageChatId !== chatId.toString()) {
+                        return;
+                    }
 
                     console.log(`새 메시지 수신: ${message.message}`);
 
