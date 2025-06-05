@@ -258,31 +258,116 @@ class WebTelegramService {
                 throw new Error('텔레그램에 로그인되지 않았습니다.');
             }
 
+            // 세션 상태 먼저 확인
+            try {
+                const isAuthorized = await this.client.checkAuthorization();
+                if (!isAuthorized) {
+                    this.isConnected = false;
+                    throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+                }
+            } catch (error) {
+                if (error.message.includes('SESSION_REVOKED') || error.message.includes('401')) {
+                    this.isConnected = false;
+                    throw new Error('세션이 취소되었습니다. 다시 로그인해주세요.');
+                }
+                throw error;
+            }
+
             if (/^-?\d+$/.test(chatIdOrUsername)) {
                 console.log(`채팅방 ID로 검색: ${chatIdOrUsername}`);
+                const chatId = chatIdOrUsername.toString();
+                
                 try {
-                    // 숫자 ID로 엔티티 가져오기 시도
-                    const entity = await this.client.getEntity(chatIdOrUsername);
-                    if (entity) {
-                        const chatId = entity.id.toString();
-                        const title = entity.title || entity.firstName || entity.username || `채팅방 ID: ${chatIdOrUsername}`;
+                    // 먼저 모든 대화 목록 가져오기
+                    const dialogs = await this.client.getDialogs({ limit: 100 });
+                    
+                    // 대화 목록에서 해당 ID 찾기
+                    for (const dialog of dialogs) {
+                        const entity = dialog.entity;
+                        if (!entity) continue;
                         
-                        console.log(`채팅방 찾음: ${title} (ID: ${chatId})`);
-                        return {
-                            success: true,
-                            chatId: chatId,
-                            title: title
-                        };
+                        let entityId;
+                        if (entity.id) {
+                            entityId = entity.id.toString();
+                        } else if (entity.chatId) {
+                            entityId = entity.chatId.toString();
+                        } else if (entity.channelId) {
+                            entityId = entity.channelId.toString();
+                        }
+                        
+                        // 그룹의 경우 음수 ID 처리
+                        if (entity.chatId && chatId.startsWith('-')) {
+                            const groupId = '-' + entity.chatId.toString();
+                            if (groupId === chatId) {
+                                const title = entity.title || '알 수 없는 그룹';
+                                console.log(`그룹 채팅방 찾음: ${title} (ID: ${chatId})`);
+                                return {
+                                    success: true,
+                                    chatId: chatId,
+                                    title: title,
+                                    type: 'group'
+                                };
+                            }
+                        }
+                        
+                        // 채널의 경우 슈퍼그룹 ID 처리
+                        if (entity.id && entity.className === 'Channel') {
+                            const channelId = '-100' + entity.id.toString();
+                            if (channelId === chatId || entity.id.toString() === chatId) {
+                                const title = entity.title || '알 수 없는 채널';
+                                console.log(`채널/슈퍼그룹 찾음: ${title} (ID: ${chatId})`);
+                                return {
+                                    success: true,
+                                    chatId: chatId,
+                                    title: title,
+                                    type: 'channel'
+                                };
+                            }
+                        }
+                        
+                        // 일반 사용자의 경우
+                        if (entityId === chatId || entityId === chatId.replace('-', '')) {
+                            const title = entity.title || entity.firstName || entity.username || '알 수 없음';
+                            console.log(`사용자 찾음: ${title} (ID: ${chatId})`);
+                            return {
+                                success: true,
+                                chatId: chatId,
+                                title: title,
+                                type: 'user'
+                            };
+                        }
                     }
-                } catch (entityError) {
-                    console.log('엔티티를 찾을 수 없어 ID를 그대로 사용합니다:', entityError.message);
+                    
+                    console.log(`대화 목록에서 ID ${chatId}를 찾을 수 없습니다. ID를 그대로 사용합니다.`);
+                    
+                } catch (dialogError) {
+                    console.log('대화 목록 검색 실패, 직접 엔티티 검색 시도:', dialogError.message);
+                    
+                    try {
+                        // 마지막 시도: 직접 엔티티 가져오기
+                        const entity = await this.client.getEntity(parseInt(chatIdOrUsername));
+                        if (entity) {
+                            const title = entity.title || entity.firstName || entity.username || `채팅방 ID: ${chatIdOrUsername}`;
+                            console.log(`직접 검색으로 채팅방 찾음: ${title} (ID: ${chatId})`);
+                            return {
+                                success: true,
+                                chatId: chatId,
+                                title: title,
+                                type: 'direct'
+                            };
+                        }
+                    } catch (entityError) {
+                        console.log('직접 엔티티 검색도 실패:', entityError.message);
+                    }
                 }
                 
-                // 엔티티를 찾지 못한 경우 ID를 그대로 사용
+                // 모든 방법이 실패한 경우 ID를 그대로 사용
+                console.log(`채팅방을 찾을 수 없어 ID를 그대로 사용합니다: ${chatId}`);
                 return {
                     success: true,
-                    chatId: chatIdOrUsername,
-                    title: `채팅방 ID: ${chatIdOrUsername}`
+                    chatId: chatId,
+                    title: `채팅방 ID: ${chatId}`,
+                    type: 'unknown'
                 };
             }
 
@@ -295,17 +380,29 @@ class WebTelegramService {
                 const chatId = entity.id.toString();
                 const title = entity.title || entity.firstName || entity.username || '알 수 없음';
                 
-                console.log(`채팅방 찾음: ${title} (ID: ${chatId})`);
+                console.log(`사용자명으로 채팅방 찾음: ${title} (ID: ${chatId})`);
                 return {
                     success: true,
                     chatId: chatId,
-                    title: title
+                    title: title,
+                    type: 'username'
                 };
             } else {
                 throw new Error('채팅방을 찾을 수 없습니다.');
             }
         } catch (error) {
             console.error('채팅방 검색 실패:', error);
+            
+            // SESSION_REVOKED 오류인 경우 특별 처리
+            if (error.message.includes('SESSION_REVOKED') || error.message.includes('401')) {
+                this.isConnected = false;
+                return {
+                    success: false,
+                    error: '세션이 만료되었습니다. 웹 페이지에서 다시 로그인해주세요.',
+                    needsRelogin: true
+                };
+            }
+            
             return {
                 success: false,
                 error: error.message
@@ -328,11 +425,21 @@ class WebTelegramService {
 
             const chatResult = await this.findChatByIdOrUsername(chatIdOrUsername);
             if (!chatResult.success) {
+                // SESSION_REVOKED 오류인 경우 특별 처리
+                if (chatResult.needsRelogin) {
+                    this.isConnected = false;
+                    return {
+                        success: false,
+                        error: '세션이 만료되었습니다. 웹 페이지를 새로고침하고 다시 로그인해주세요.',
+                        needsRelogin: true
+                    };
+                }
                 return chatResult;
             }
 
             const chatId = chatResult.chatId;
             console.log(`채팅방 ${chatResult.title} (${chatId}) 모니터링 시작...`);
+            console.log(`채팅방 타입: ${chatResult.type || '알 수 없음'}`);
             console.log(`메시지 템플릿 ${messageTemplates.length}개 준비됨`);
 
             this.isMonitoring = true;
@@ -346,21 +453,38 @@ class WebTelegramService {
                     let messageChatId;
                     if (message.peerId) {
                         if (message.peerId.chatId) {
-                            messageChatId = message.peerId.chatId.toString();
+                            // 일반 그룹 채팅방
+                            messageChatId = '-' + message.peerId.chatId.toString();
                         } else if (message.peerId.channelId) {
-                            messageChatId = message.peerId.channelId.toString();
+                            // 슈퍼그룹 또는 채널
+                            messageChatId = '-100' + message.peerId.channelId.toString();
                         } else if (message.peerId.userId) {
+                            // 개인 채팅
                             messageChatId = message.peerId.userId.toString();
                         }
                     } else if (message.chatId) {
                         messageChatId = message.chatId.toString();
                     }
 
-                    if (!messageChatId || messageChatId !== chatId.toString()) {
+                    // 채팅방 ID 매칭 확인 (다양한 형태 고려)
+                    const targetChatId = chatId.toString();
+                    let isTargetChat = false;
+                    
+                    if (messageChatId) {
+                        isTargetChat = messageChatId === targetChatId || 
+                                      messageChatId === targetChatId.replace('-', '') ||
+                                      messageChatId.replace('-', '') === targetChatId.replace('-', '') ||
+                                      messageChatId.replace('-100', '') === targetChatId.replace('-100', '') ||
+                                      messageChatId.replace('-', '') === targetChatId.replace('-100', '');
+                    }
+
+                    if (!isTargetChat) {
+                        // 디버깅용 로그
+                        console.log(`메시지 채팅방 ID: ${messageChatId}, 대상 채팅방 ID: ${targetChatId} - 일치하지 않음`);
                         return;
                     }
 
-                    console.log(`새 메시지 수신: ${message.message}`);
+                    console.log(`새 메시지 수신 (${messageChatId}): ${message.message}`);
 
                     // 새로운 전화번호 추출기 사용
                     const analysisResult = phoneExtractor.analyzeMessage(message.message);
@@ -415,12 +539,23 @@ class WebTelegramService {
             console.log('메시지 모니터링이 시작되었습니다.');
             return {
                 success: true,
-                message: `${chatResult.title} 모니터링 시작됨`,
+                message: `${chatResult.title} 모니터링 시작됨 (타입: ${chatResult.type || '알 수 없음'})`,
                 chatInfo: chatResult
             };
         } catch (error) {
             this.isMonitoring = false;
             console.error('모니터링 시작 실패:', error);
+            
+            // SESSION_REVOKED 오류인 경우 특별 처리
+            if (error.message.includes('SESSION_REVOKED') || error.message.includes('401')) {
+                this.isConnected = false;
+                return {
+                    success: false,
+                    error: '세션이 만료되었습니다. 웹 페이지를 새로고침하고 다시 로그인해주세요.',
+                    needsRelogin: true
+                };
+            }
+            
             return {
                 success: false,
                 error: error.message

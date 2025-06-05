@@ -2,12 +2,26 @@
  * 텔레그램 SMS 자동 발송 시스템 - 메인 자바스크립트 파일
  */
 
+// 공통 응답 처리 함수 (세션 만료 감지)
+function handleResponse(data) {
+    if (data.needsRelogin) {
+        showToast('세션이 만료되었습니다. 페이지를 새로고침합니다.', 'warning');
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+        return false;
+    }
+    return true;
+}
+
 // 서버 상태 확인 함수
 function checkServerStatus() {
     axios.get('/api/status')
         .then(function(response) {
             const status = response.data;
-            updateStatusIndicators(status);
+            if (handleResponse(status)) {
+                updateStatusIndicators(status);
+            }
         })
         .catch(function(error) {
             console.error('서버 상태 확인 실패:', error);
@@ -181,6 +195,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 const data = await response.json();
+                if (!handleResponse(data)) return;
+                
                 if (data.success) {
                     phoneCodeHash = data.phoneCodeHash;
                     telegramLoginForm.style.display = 'none';
@@ -217,12 +233,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 const data = await response.json();
+                if (!handleResponse(data)) return;
+                
                 if (data.success) {
                     updateStatus('텔레그램 로그인이 완료되었습니다.', 'success');
                     telegramVerifyForm.style.display = 'none';
                     if (telegramLoginForm) {
                         telegramLoginForm.style.display = 'block';
                     }
+                    // 페이지 새로고침하여 최신 상태 반영
+                    setTimeout(() => window.location.reload(), 1000);
+                } else if (data.needsPassword) {
+                    updateStatus('2단계 인증 비밀번호가 필요합니다.', 'warning');
+                    // 2단계 인증 입력 필드 추가 로직 필요 시 여기에 구현
                 } else {
                     updateStatus(data.error, 'danger');
                 }
